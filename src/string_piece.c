@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#include "gumbo_compat.h"
 
 #include "util.h"
 
@@ -41,8 +41,9 @@ bool gumbo_string_equals_ignore_case(
 
 void gumbo_string_copy(struct GumboInternalParser* parser,
     GumboStringPiece* dest, const GumboStringPiece* source) {
+  char* buffer;
   dest->length = source->length;
-  char* buffer = gumbo_parser_allocate(parser, source->length);
+  buffer = gumbo_parser_allocate(parser, source->length);
   memcpy(buffer, source->data, source->length);
   dest->data = buffer;
 }

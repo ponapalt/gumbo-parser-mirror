@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
-#include <strings.h>  // For strncasecmp.
+#include "gumbo_compat.h"  // For strncasecmp.
 
 #include "error.h"
 #include "gumbo.h"
@@ -100,6 +100,8 @@ uint32_t static inline decode(uint32_t* state, uint32_t* codep, uint32_t byte) {
 // Adds a decoding error to the parser's error list, based on the current state
 // of the Utf8Iterator.
 static void add_error(Utf8Iterator* iter, GumboErrorType type) {
+  uint64_t code_point;
+  int i;
   GumboParser* parser = iter->_parser;
 
   GumboError* error = gumbo_add_error(parser);
@@ -113,8 +115,8 @@ static void add_error(Utf8Iterator* iter, GumboErrorType type) {
   // At the point the error is recorded, the code point hasn't been computed
   // yet (and can't be, because it's invalid), so we need to build up the raw
   // hex value from the bytes under the cursor.
-  uint64_t code_point = 0;
-  for (int i = 0; i < iter->_width; ++i) {
+  code_point = 0;
+  for (i = 0; i < iter->_width; ++i) {
     code_point = (code_point << 8) | (unsigned char) iter->_start[i];
   }
   error->v.codepoint = code_point;
@@ -125,6 +127,9 @@ static void add_error(Utf8Iterator* iter, GumboErrorType type) {
 // When this method returns, iter->_width and iter->_current will be set
 // appropriately, as well as any error flags.
 static void read_char(Utf8Iterator* iter) {
+  uint32_t state;
+  uint32_t code_point;
+  const char* c;
   if (iter->_start >= iter->_end) {
     // No input left to consume; emit an EOF and set width = 0.
     iter->_current = -1;
@@ -132,9 +137,9 @@ static void read_char(Utf8Iterator* iter) {
     return;
   }
 
-  uint32_t code_point = 0;
-  uint32_t state = UTF8_ACCEPT;
-  for (const char* c = iter->_start; c < iter->_end; ++c) {
+  code_point = 0;
+  state = UTF8_ACCEPT;
+  for (c = iter->_start; c < iter->_end; ++c) {
     decode(&state, &code_point, (uint32_t)(unsigned char) (*c));
     if (state == UTF8_ACCEPT) {
       iter->_width = c - iter->_start + 1;
@@ -144,8 +149,9 @@ static void read_char(Utf8Iterator* iter) {
       // overrun, instead of having to read in a full next code point.
       // http://www.whatwg.org/specs/web-apps/current-work/multipage/parsing.html#preprocessing-the-input-stream
       if (code_point == '\r') {
+        const char* next;
         assert(iter->_width == 1);
-        const char* next = c + 1;
+        next = c + 1;
         if (next < iter->_end && *next == '\n') {
           // Advance the iter, as if the carriage return didn't exist.
           ++iter->_start;
@@ -241,7 +247,8 @@ bool utf8iterator_maybe_consume_match(Utf8Iterator* iter, const char* prefix,
                  (case_sensitive ? !strncmp(iter->_start, prefix, length)
                                  : !strncasecmp(iter->_start, prefix, length));
   if (matched) {
-    for (unsigned int i = 0; i < length; ++i) {
+    unsigned int i;
+    for (i = 0; i < length; ++i) {
       utf8iterator_next(iter);
     }
     return true;

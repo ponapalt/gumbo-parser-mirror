@@ -81,12 +81,13 @@ void gumbo_tag_from_original_text(GumboStringPiece* text) {
     text->data += 2;  // Move past </
     text->length -= 3;
   } else {
+    const char* c;
     // Start tag.
     text->data += 1;  // Move past <
     text->length -= 2;
     // explicitly looking for whitespace or other illegal tag characters.
     // see https://html.spec.whatwg.org/multipage/syntax.html#tag-name-state
-    for (const char* c = text->data; c != text->data + text->length; ++c) {
+    for (c = text->data; c != text->data + text->length; ++c) {
       if (*c == ' ' || *c == '\t' || *c == '\n' || *c == '\f' || *c == '/') {
         text->length = c - text->data;
         break;
