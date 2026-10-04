@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "gumbo.h"
+#include "gumbo_compat.h"
 #include "parser.h"
 #include "string_buffer.h"
 #include "util.h"
@@ -32,25 +33,29 @@
 // written.
 static int print_message(
     GumboParser* parser, GumboStringBuffer* output, const char* format, ...) {
+  int bytes_written;
   va_list args;
   int remaining_capacity = output->capacity - output->length;
   va_start(args, format);
-  int bytes_written = vsnprintf(
+  bytes_written = vsnprintf(
       output->data + output->length, remaining_capacity, format, args);
   va_end(args);
 #ifdef _MSC_VER
-  if (bytes_written == -1) {
-    // vsnprintf returns -1 on MSVC++ if there's not enough capacity, instead of
-    // returning the number of bytes that would've been written had there been
-    // enough.  In this case, we'll double the buffer size and hope it fits when
-    // we retry (letting it fail and returning 0 if it doesn't), since there's
-    // no way to smartly resize the buffer.
-    gumbo_string_buffer_reserve(parser, output->capacity * 2, output);
+  // vsnprintf returns -1 on MSVC++ if there's not enough capacity, instead of
+  // returning the number of bytes that would've been written had there been
+  // enough.  In this case, we'll double the buffer size and retry (giving up
+  // and returning 0 if it still doesn't fit), since there's no way to smartly
+  // resize the buffer.
+  while (bytes_written == -1 && output->capacity < (1 << 20)) {
+    gumbo_string_buffer_reserve(parser, output->capacity * 2 + 64, output);
+    remaining_capacity = output->capacity - output->length;
     va_start(args, format);
-    int result = vsnprintf(
+    bytes_written = vsnprintf(
         output->data + output->length, remaining_capacity, format, args);
     va_end(args);
-    return result == -1 ? 0 : result;
+  }
+  if (bytes_written == -1) {
+    return 0;
   }
 #else
   // -1 in standard C99 indicates an encoding error.  Return 0 and do nothing.
@@ -74,12 +79,14 @@ static int print_message(
 
 static void print_tag_stack(GumboParser* parser, const GumboParserError* error,
     GumboStringBuffer* output) {
+  unsigned int i;
   print_message(parser, output, "  Currently open tags: ");
-  for (unsigned int i = 0; i < error->tag_stack.length; ++i) {
+  for (i = 0; i < error->tag_stack.length; ++i) {
+    GumboTag tag;
     if (i) {
       print_message(parser, output, ", ");
     }
-    GumboTag tag = (GumboTag)(intptr_t) error->tag_stack.data[i];
+    tag = (GumboTag)(intptr_t) error->tag_stack.data[i];
     print_message(parser, output, gumbo_normalized_tagname(tag));
   }
   gumbo_string_buffer_append_codepoint(parser, '.', output);
@@ -135,8 +142,9 @@ static void handle_parser_error(GumboParser* parser,
 // pointer to the beginning of the string if this is the first line.
 static const char* find_last_newline(
     const char* original_text, const char* error_location) {
+  const char* c;
   assert(error_location >= original_text);
-  const char* c = error_location;
+  c = error_location;
   // If the error location itself is a newline then start searching for the
   // preceding newline one character earlier, if possible. See:
   // https://github.com/rubys/nokogumbo/commit/bd623555730cdd260f6cec6d7cf990ff297da63d
@@ -163,11 +171,12 @@ static const char* find_next_newline(
 }
 
 GumboError* gumbo_add_error(GumboParser* parser) {
+  GumboError* error;
   int max_errors = parser->_options->max_errors;
   if (max_errors >= 0 && parser->_output->errors.length >= (unsigned int) max_errors) {
     return NULL;
   }
-  GumboError* error = gumbo_parser_allocate(parser, sizeof(GumboError));
+  error = gumbo_parser_allocate(parser, sizeof(GumboError));
   gumbo_vector_add(parser, error, &parser->_output->errors);
   return error;
 }
@@ -236,11 +245,14 @@ void gumbo_error_to_string(
 void gumbo_caret_diagnostic_to_string(GumboParser* parser,
     const GumboError* error, const char* source_text,
     GumboStringBuffer* output) {
+  const char* line_end;
+  const char* line_start;
+  int num_spaces;
+  GumboStringPiece original_line;
   gumbo_error_to_string(parser, error, output);
 
-  const char* line_start = find_last_newline(source_text, error->original_text);
-  const char* line_end = find_next_newline(source_text, error->original_text);
-  GumboStringPiece original_line;
+  line_start = find_last_newline(source_text, error->original_text);
+  line_end = find_next_newline(source_text, error->original_text);
   original_line.data = line_start;
   original_line.length = line_end - line_start;
 
@@ -249,7 +261,7 @@ void gumbo_caret_diagnostic_to_string(GumboParser* parser,
   gumbo_string_buffer_append_codepoint(parser, '\n', output);
   gumbo_string_buffer_reserve(
       parser, output->length + error->position.column, output);
-  int num_spaces = error->position.column - 1;
+  num_spaces = error->position.column - 1;
   memset(output->data + output->length, ' ', num_spaces);
   output->length += num_spaces;
   gumbo_string_buffer_append_codepoint(parser, '^', output);
@@ -280,7 +292,8 @@ void gumbo_init_errors(GumboParser* parser) {
 }
 
 void gumbo_destroy_errors(GumboParser* parser) {
-  for (unsigned int i = 0; i < parser->_output->errors.length; ++i) {
+  unsigned int i;
+  for (i = 0; i < parser->_output->errors.length; ++i) {
     gumbo_error_destroy(parser, parser->_output->errors.data[i]);
   }
   gumbo_vector_destroy(parser, &parser->_output->errors);
