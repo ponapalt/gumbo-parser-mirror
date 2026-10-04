@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#include "gumbo_compat.h"
 
 #include "string_piece.h"
 #include "util.h"
@@ -60,6 +60,7 @@ void gumbo_string_buffer_reserve(struct GumboInternalParser* parser,
 
 void gumbo_string_buffer_append_codepoint(
     struct GumboInternalParser* parser, int c, GumboStringBuffer* output) {
+  int i;
   // num_bytes is actually the number of continuation bytes, 1 less than the
   // total number of bytes.  This is done to keep the loop below simple and
   // should probably change if we unroll it.
@@ -79,7 +80,7 @@ void gumbo_string_buffer_append_codepoint(
   }
   maybe_resize_string_buffer(parser, num_bytes + 1, output);
   output->data[output->length++] = prefix | (c >> (num_bytes * 6));
-  for (int i = num_bytes - 1; i >= 0; --i) {
+  for (i = num_bytes - 1; i >= 0; --i) {
     output->data[output->length++] = 0x80 | (0x3f & (c >> (i * 6)));
   }
 }

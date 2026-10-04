@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#include "gumbo_compat.h"
 
 #include "util.h"
 
@@ -55,10 +55,12 @@ static void enlarge_vector_if_full(
     struct GumboInternalParser* parser, GumboVector* vector) {
   if (vector->length >= vector->capacity) {
     if (vector->capacity) {
+      void** temp;
+      size_t num_bytes;
       size_t old_num_bytes = sizeof(void*) * vector->capacity;
       vector->capacity *= 2;
-      size_t num_bytes = sizeof(void*) * vector->capacity;
-      void** temp = gumbo_parser_allocate(parser, num_bytes);
+      num_bytes = sizeof(void*) * vector->capacity;
+      temp = gumbo_parser_allocate(parser, num_bytes);
       memcpy(temp, vector->data, old_num_bytes);
       gumbo_parser_deallocate(parser, vector->data);
       vector->data = temp;
@@ -88,7 +90,8 @@ void* gumbo_vector_pop(
 }
 
 int gumbo_vector_index_of(GumboVector* vector, const void* element) {
-  for (unsigned int i = 0; i < vector->length; ++i) {
+  unsigned int i;
+  for (i = 0; i < vector->length; ++i) {
     if (vector->data[i] == element) {
       return i;
     }
@@ -118,9 +121,10 @@ void gumbo_vector_remove(
 
 void* gumbo_vector_remove_at(struct GumboInternalParser* parser,
     unsigned int index, GumboVector* vector) {
+  void* result;
   assert(index >= 0);
   assert(index < vector->length);
-  void* result = vector->data[index];
+  result = vector->data[index];
   memmove(&vector->data[index], &vector->data[index + 1],
       sizeof(void*) * (vector->length - index - 1));
   --vector->length;

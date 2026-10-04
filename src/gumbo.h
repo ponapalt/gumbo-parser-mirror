@@ -44,10 +44,14 @@
 
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
+#if _MSC_VER >= 1400
 #define fileno _fileno
 #endif
+#endif
 
+#ifndef __cplusplus
 #include <stdbool.h>
+#endif
 #include <stddef.h>
 
 #ifdef __cplusplus

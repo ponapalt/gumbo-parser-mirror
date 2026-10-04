@@ -102,7 +102,8 @@ static void add_named_reference_error(struct GumboInternalParser* parser,
 }
 
 static int maybe_replace_codepoint(int codepoint) {
-  for (int i = 0; kCharReplacements[i].from_char != -1; ++i) {
+  int i;
+  for (i = 0; kCharReplacements[i].from_char != -1; ++i) {
     if (kCharReplacements[i].from_char == codepoint) {
       return kCharReplacements[i].to_char;
     }
@@ -112,16 +113,22 @@ static int maybe_replace_codepoint(int codepoint) {
 
 static bool consume_numeric_ref(
     struct GumboInternalParser* parser, Utf8Iterator* input, int* output) {
+  int c;
+  bool status;
+  bool is_hex;
+  int digit;
+  unsigned int codepoint;
+  int replacement;
   utf8iterator_next(input);
-  bool is_hex = false;
-  int c = utf8iterator_current(input);
+  is_hex = false;
+  c = utf8iterator_current(input);
   if (c == 'x' || c == 'X') {
     is_hex = true;
     utf8iterator_next(input);
     c = utf8iterator_current(input);
   }
 
-  int digit = parse_digit(c, is_hex);
+  digit = parse_digit(c, is_hex);
   if (digit == -1) {
     // First digit was invalid; add a parse error and return.
     add_no_digit_error(parser, input);
@@ -130,8 +137,8 @@ static bool consume_numeric_ref(
     return false;
   }
 
-  unsigned int codepoint = 0;
-  bool status = true;
+  codepoint = 0;
+  status = true;
   do {
     codepoint = (codepoint * (is_hex ? 16 : 10)) + digit;
     utf8iterator_next(input);
@@ -146,7 +153,7 @@ static bool consume_numeric_ref(
     utf8iterator_next(input);
   }
 
-  int replacement = maybe_replace_codepoint(codepoint);
+  replacement = maybe_replace_codepoint(codepoint);
   if (replacement != -1) {
     add_codepoint_error(
         parser, input, GUMBO_ERR_NUMERIC_CHAR_REF_INVALID, codepoint);
@@ -200,6 +207,7 @@ static const char* find_named_ref(
   OneOrTwoCodepoints best = { kGumboNoChar, kGumboNoChar };
 
   while (p < end && (size_t) (p - start) < GUMBO_NAMED_CHAR_REF_MAX_LEN) {
+    const struct GumboNamedCharRef* ref;
     const unsigned char c = (unsigned char) *p;
     if (!isalnum(c) && c != ';') {
       break;
@@ -207,7 +215,7 @@ static const char* find_named_ref(
 
     ++p;
 
-    const struct GumboNamedCharRef* ref = gumbo_named_char_ref_find(start, (size_t)(p - start));
+    ref = gumbo_named_char_ref_find(start, (size_t)(p - start));
     if (ref) {
       best.first = ref->first;
       best.second = ref->second;
@@ -231,22 +239,28 @@ static const char* find_named_ref(
 static bool consume_named_ref(
     struct GumboInternalParser* parser, Utf8Iterator* input, bool is_in_attribute,
     OneOrTwoCodepoints* output) {
+  const char* match_end;
+  const char* end;
+  int len;
+  const char* start;
+  char last_char;
   assert(output->first == kGumboNoChar);
-  const char* start = utf8iterator_get_char_pointer(input);
-  const char* end = utf8iterator_get_end_pointer(input);
-  const char* match_end = find_named_ref(start, end, output);
+  start = utf8iterator_get_char_pointer(input);
+  end = utf8iterator_get_end_pointer(input);
+  match_end = find_named_ref(start, end, output);
 
   if (!match_end) {
+    bool status;
     output->first = kGumboNoChar;
     output->second = kGumboNoChar;
-    bool status = maybe_add_invalid_named_reference(parser, input);
+    status = maybe_add_invalid_named_reference(parser, input);
     utf8iterator_reset(input);
     return status;
   }
 
   assert(output->first != kGumboNoChar);
-  char last_char = *(match_end - 1);
-  int len = match_end - start;
+  last_char = *(match_end - 1);
+  len = match_end - start;
   if (last_char == ';') {
     bool matched = utf8iterator_maybe_consume_match(input, start, len, true);
     assert(matched);
@@ -259,12 +273,13 @@ static bool consume_named_ref(
     utf8iterator_reset(input);
     return true;
   } else {
+    bool matched;
     GumboStringPiece bad_ref;
     bad_ref.length = match_end - start;
     bad_ref.data = start;
     add_named_reference_error(
         parser, input, GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON, bad_ref);
-    bool matched = utf8iterator_maybe_consume_match(input, start, len, true);
+    matched = utf8iterator_maybe_consume_match(input, start, len, true);
     assert(matched);
     return false;
   }
@@ -273,9 +288,10 @@ static bool consume_named_ref(
 bool consume_char_ref(struct GumboInternalParser* parser,
     struct GumboInternalUtf8Iterator* input, int additional_allowed_char,
     bool is_in_attribute, OneOrTwoCodepoints* output) {
+  int c;
   utf8iterator_mark(input);
   utf8iterator_next(input);
-  int c = utf8iterator_current(input);
+  c = utf8iterator_current(input);
   output->first = kGumboNoChar;
   output->second = kGumboNoChar;
   if (c == additional_allowed_char) {

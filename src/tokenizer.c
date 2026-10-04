@@ -201,11 +201,12 @@ typedef struct GumboInternalTokenizerState {
 // Adds an ERR_UNEXPECTED_CODE_POINT parse error to the parser's error struct.
 static void tokenizer_add_parse_error(
     GumboParser* parser, GumboErrorType type) {
+  GumboTokenizerState* tokenizer;
   GumboError* error = gumbo_add_error(parser);
   if (!error) {
     return;
   }
-  GumboTokenizerState* tokenizer = parser->_tokenizer_state;
+  tokenizer = parser->_tokenizer_state;
   utf8iterator_get_position(&tokenizer->_input, &error->position);
   error->original_text = utf8iterator_get_char_pointer(&tokenizer->_input);
   error->type = type;
@@ -540,13 +541,14 @@ static StateResult emit_current_tag(GumboParser* parser, GumboToken* output) {
     gumbo_debug(
         "Emitted start tag %s.\n", gumbo_normalized_tagname(tag_state->_tag));
   } else {
+    unsigned int i;
     output->type = GUMBO_TOKEN_END_TAG;
     output->v.end_tag = tag_state->_tag;
     // In end tags, ownership of the attributes vector is not transferred to the
     // token, but it's still initialized as normal, so it must be manually
     // deallocated.  There may also be attributes to destroy, in certain broken
     // cases like </div</th> (the "th" is an attribute there).
-    for (unsigned int i = 0; i < tag_state->_attributes.length; ++i) {
+    for (i = 0; i < tag_state->_attributes.length; ++i) {
       gumbo_destroy_attribute(parser, tag_state->_attributes.data[i]);
     }
     gumbo_parser_deallocate(parser, tag_state->_attributes.data);
@@ -569,8 +571,9 @@ static StateResult emit_current_tag(GumboParser* parser, GumboToken* output) {
 // We need to abandon the tag we'd started & free its memory in that case to
 // avoid a memory leak.
 static void abandon_current_tag(GumboParser* parser) {
+  unsigned int i;
   GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
-  for (unsigned int i = 0; i < tag_state->_attributes.length; ++i) {
+  for (i = 0; i < tag_state->_attributes.length; ++i) {
     gumbo_destroy_attribute(parser, tag_state->_attributes.data[i]);
   }
   gumbo_parser_deallocate(parser, tag_state->_attributes.data);
@@ -617,6 +620,7 @@ static StateResult emit_comment(GumboParser* parser, GumboToken* output) {
 // should resume normal operation.
 static bool maybe_emit_from_temporary_buffer(
     GumboParser* parser, GumboToken* output) {
+  bool saved_reconsume_state;
   GumboTokenizerState* tokenizer = parser->_tokenizer_state;
   const char* c = tokenizer->_temporary_buffer_emit;
   GumboStringBuffer* buffer = &tokenizer->_temporary_buffer;
@@ -634,7 +638,7 @@ static bool maybe_emit_from_temporary_buffer(
   // have already been advanced past.  However, it should be preserved so that
   // when the *next* character is encountered again, the tokenizer knows not to
   // advance past it.
-  bool saved_reconsume_state = tokenizer->_reconsume_current_input;
+  saved_reconsume_state = tokenizer->_reconsume_current_input;
   tokenizer->_reconsume_current_input = false;
   emit_char(parser, *c, output);
   ++tokenizer->_temporary_buffer_emit;
@@ -760,11 +764,12 @@ static void finish_tag_name(GumboParser* parser) {
 // Adds an ERR_DUPLICATE_ATTR parse error to the parser's error struct.
 static void add_duplicate_attr_error(GumboParser* parser, const char* attr_name,
     int original_index, int new_index) {
+  GumboTagState* tag_state;
   GumboError* error = gumbo_add_error(parser);
   if (!error) {
     return;
   }
-  GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
+  tag_state = &parser->_tokenizer_state->_tag_state;
   error->type = GUMBO_ERR_DUPLICATE_ATTR;
   error->position = tag_state->_start_pos;
   error->original_text = tag_state->_original_text;
@@ -781,6 +786,9 @@ static void add_duplicate_attr_error(GumboParser* parser, const char* attr_name,
 // specified, the new attribute is dropped, a parse error is added, and the
 // function returns false.  Otherwise, this returns true.
 static bool finish_attribute_name(GumboParser* parser) {
+  GumboVector* /* GumboAttribute* */ attributes;
+  GumboAttribute* attr;
+  unsigned int i;
   GumboTokenizerState* tokenizer = parser->_tokenizer_state;
   GumboTagState* tag_state = &tokenizer->_tag_state;
   // May've been set by a previous attribute without a value; reset it here.
@@ -788,20 +796,20 @@ static bool finish_attribute_name(GumboParser* parser) {
   assert(tag_state->_attributes.data);
   assert(tag_state->_attributes.capacity);
 
-  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
-  for (unsigned int i = 0; i < attributes->length; ++i) {
-    GumboAttribute* attr = attributes->data[i];
-    if (strlen(attr->name) == tag_state->_buffer.length &&
-        memcmp(attr->name, tag_state->_buffer.data,
+  attributes = &tag_state->_attributes;
+  for (i = 0; i < attributes->length; ++i) {
+    GumboAttribute* existing_attr = attributes->data[i];
+    if (strlen(existing_attr->name) == tag_state->_buffer.length &&
+        memcmp(existing_attr->name, tag_state->_buffer.data,
             tag_state->_buffer.length) == 0) {
       // Identical attribute; bail.
-      add_duplicate_attr_error(parser, attr->name, i, attributes->length);
+      add_duplicate_attr_error(parser, existing_attr->name, i, attributes->length);
       tag_state->_drop_next_attr_value = true;
       return false;
     }
   }
 
-  GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
+  attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
   attr->attr_namespace = GUMBO_ATTR_NAMESPACE_NONE;
   copy_over_tag_buffer(parser, &attr->name);
   copy_over_original_tag_text(
@@ -817,6 +825,7 @@ static bool finish_attribute_name(GumboParser* parser) {
 // Finishes an attribute value.  This sets the value of the most recently added
 // attribute to the current contents of the tag buffer.
 static void finish_attribute_value(GumboParser* parser) {
+  GumboAttribute* attr;
   GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
   if (tag_state->_drop_next_attr_value) {
     // Duplicate attribute name detected in an earlier state, so we have to
@@ -826,7 +835,7 @@ static void finish_attribute_value(GumboParser* parser) {
     return;
   }
 
-  GumboAttribute* attr =
+  attr =
       tag_state->_attributes.data[tag_state->_attributes.length - 1];
   gumbo_parser_deallocate(parser, (void*) attr->value);
   copy_over_tag_buffer(parser, &attr->value);
@@ -1009,17 +1018,27 @@ static StateResult handle_plaintext_state(GumboParser* parser,
 // > bogus comments. This is for compatibility with existing HTML
 // > content, where such syntax is relatively common.
 static bool pi_target_is_xml_reserved(const GumboStringBuffer* t) {
-  const GumboStringPiece target = {t->data, t->length};
-  return gumbo_string_equals_ignore_case(&target, &(GumboStringPiece){"xml", 3})
-      || gumbo_string_equals_ignore_case(&target, &(GumboStringPiece){"xml-stylesheet", 14});
+  GumboStringPiece target;
+  GumboStringPiece xml;
+  GumboStringPiece xml_stylesheet;
+  target.data = t->data;
+  target.length = t->length;
+  xml.data = "xml";
+  xml.length = 3;
+  xml_stylesheet.data = "xml-stylesheet";
+  xml_stylesheet.length = 14;
+  return gumbo_string_equals_ignore_case(&target, &xml)
+      || gumbo_string_equals_ignore_case(&target, &xml_stylesheet);
 }
 
 // https://html.spec.whatwg.org/multipage/syntax.html#processing-instructions
 static StateResult handle_processing_instruction_state(GumboParser* parser,
     GumboTokenizerState* tokenizer, int c, GumboToken* output) {
+  bool valid_target;
+  bool has_separator;
+  GumboStringBuffer pi;
   gumbo_tokenizer_set_state(parser, GUMBO_LEX_DATA);
 
-  GumboStringBuffer pi;
   gumbo_string_buffer_init(parser, &pi);
   while (is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_') {
     gumbo_string_buffer_append_codepoint(parser, c, &pi);
@@ -1027,8 +1046,8 @@ static StateResult handle_processing_instruction_state(GumboParser* parser,
     c = utf8iterator_current(&tokenizer->_input);
   }
 
-  bool has_separator = get_char_token_type(false, c) == GUMBO_TOKEN_WHITESPACE || c == '?' || c == '>';
-  bool valid_target = pi.length > 0
+  has_separator = get_char_token_type(false, c) == GUMBO_TOKEN_WHITESPACE || c == '?' || c == '>';
+  valid_target = pi.length > 0
       && (is_alpha(pi.data[0]) || pi.data[0] == '_')
       && !pi_target_is_xml_reserved(&pi);
 
@@ -1038,9 +1057,10 @@ static StateResult handle_processing_instruction_state(GumboParser* parser,
   }
 
   if (!valid_target || !has_separator) {
+    size_t i;
     clear_temporary_buffer(parser);
     append_char_to_temporary_buffer(parser, '?');
-    for (size_t i = 0; i < pi.length; ++i) {
+    for (i = 0; i < pi.length; ++i) {
       append_char_to_temporary_buffer(parser, pi.data[i]);
     }
     gumbo_string_buffer_destroy(parser, &pi);
@@ -2953,16 +2973,19 @@ bool gumbo_lex(GumboParser* parser, GumboToken* output) {
   }
 
   while (1) {
+    bool should_advance;
+    int c;
+    StateResult result;
     assert(!tokenizer->_temporary_buffer_emit);
     assert(tokenizer->_buffered_emit_char == kGumboNoChar);
-    int c = utf8iterator_current(&tokenizer->_input);
+    c = utf8iterator_current(&tokenizer->_input);
     gumbo_debug(
         "Lexing character '%c' (%d) in state %d.\n", c, c, tokenizer->_state);
-    StateResult result =
+    result =
         dispatch_table[tokenizer->_state](parser, tokenizer, c, output);
     // We need to clear reconsume_current_input before returning to prevent
     // certain infinite loop states.
-    bool should_advance = !tokenizer->_reconsume_current_input;
+    should_advance = !tokenizer->_reconsume_current_input;
     tokenizer->_reconsume_current_input = false;
 
     if (result == RETURN_SUCCESS) {
@@ -2981,6 +3004,7 @@ void gumbo_token_destroy(GumboParser* parser, GumboToken* token) {
   if (!token) return;
 
   switch (token->type) {
+    unsigned int i;
     case GUMBO_TOKEN_DOCTYPE:
       gumbo_parser_deallocate(parser, (void*) token->v.doc_type.name);
       gumbo_parser_deallocate(
@@ -2989,7 +3013,7 @@ void gumbo_token_destroy(GumboParser* parser, GumboToken* token) {
           parser, (void*) token->v.doc_type.system_identifier);
       return;
     case GUMBO_TOKEN_START_TAG:
-      for (unsigned int i = 0; i < token->v.start_tag.attributes.length; ++i) {
+      for (i = 0; i < token->v.start_tag.attributes.length; ++i) {
         GumboAttribute* attr = token->v.start_tag.attributes.data[i];
         if (attr) {
           // May have been nulled out if this token was merged with another.
