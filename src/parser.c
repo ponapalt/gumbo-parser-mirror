@@ -49,6 +49,7 @@ typedef char gumbo_tagset[GUMBO_TAG_LAST];
 #define TAGSET_INCLUDES(tagset, namespace, tag) \
   (tag < GUMBO_TAG_LAST && tagset[(int) tag] & (1 << (int) namespace))
 
+// https://html.spec.whatwg.org/multipage/parsing.html#has-an-element-in-the-specific-scope
 #define SCOPE_TAGS            \
   TAG(APPLET),                \
   TAG(CAPTION),               \
@@ -58,6 +59,7 @@ typedef char gumbo_tagset[GUMBO_TAG_LAST];
   TAG(TH),                    \
   TAG(MARQUEE),               \
   TAG(OBJECT),                \
+  TAG(SELECT),                \
   TAG(TEMPLATE),              \
   TAG_MATHML(MI),             \
   TAG_MATHML(MO),             \
@@ -1828,9 +1830,11 @@ static bool is_special_node(const GumboNode* node) {
           TAG(IFRAME),
           TAG(IMG),
           TAG(INPUT),
+          TAG(KEYGEN),
           TAG(LI),
           TAG(LINK),
           TAG(LISTING),
+          TAG(MAIN),
           TAG(MARQUEE),
           TAG(MENU),
           TAG(META),
@@ -1845,7 +1849,10 @@ static bool is_special_node(const GumboNode* node) {
           TAG(PLAINTEXT),
           TAG(PRE),
           TAG(SCRIPT),
+          TAG(SEARCH),
           TAG(SECTION),
+          TAG(SELECT),
+          TAG(SOURCE),
           TAG(STYLE),
           TAG(SUMMARY),
           TAG(TABLE),
@@ -1858,6 +1865,7 @@ static bool is_special_node(const GumboNode* node) {
           TAG(THEAD),
           TAG(TITLE),
           TAG(TR),
+          TAG(TRACK),
           TAG(UL),
           TAG(WBR),
           TAG(XMP),
