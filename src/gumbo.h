@@ -632,6 +632,16 @@ typedef struct GumboInternalOptions {
    * Default: GUMBO_NAMESPACE_HTML
    */
   GumboNamespaceEnum fragment_namespace;
+
+  /**
+   * The maximum nesting depth (number of open elements).  When it is exceeded
+   * the parser stops reading as if the input ended there, and the tree built so
+   * far is returned.  Without a limit, maliciously nested input makes parsing
+   * quadratic in time and destroying the tree recursive in stack depth.
+   * Set to 0 to disable the limit.
+   * Default: 0
+   */
+  int max_depth;
 } GumboOptions;
 
 /** Default options struct; use this with gumbo_parse_with_options. */
