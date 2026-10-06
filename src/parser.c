@@ -278,7 +278,7 @@ static void* malloc_wrapper(void* unused, size_t size) { return malloc(size); }
 static void free_wrapper(void* unused, void* ptr) { free(ptr); }
 
 const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
-    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML};
+    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, 0};
 
 static const GumboStringPiece kDoctypeHtml = GUMBO_STRING("html");
 static const GumboStringPiece kPublicIdHtml4_0 =
@@ -4420,7 +4420,9 @@ GumboOutput* gumbo_parse_with_options(
     assert(loop_count < 1000000000);
 
   } while ((token.type != GUMBO_TOKEN_EOF || state->_reprocess_current_token) &&
-           !(options->stop_on_first_error && has_error));
+           !(options->stop_on_first_error && has_error) &&
+           !(options->max_depth > 0 &&
+               state->_open_elements.length > (unsigned int) options->max_depth));
 
   finish_parsing(&parser);
   // For API uniformity reasons, if the doctype still has nulls, convert them to
