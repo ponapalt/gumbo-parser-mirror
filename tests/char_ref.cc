@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "error.h"
 #include "gtest/gtest.h"
 #include "test_utils.h"
 #include "utf8.h"
@@ -98,6 +99,50 @@ TEST_F(CharRefTest, NumericInvalid) {
   EXPECT_FALSE(ConsumeCharRef("&#xDA00"));
   EXPECT_EQ(0xFFFD, output_.first);
   EXPECT_EQ(kGumboNoChar, output_.second);
+}
+
+// If the number is greater than 0x10FFFF, then this is a character-reference-outside-unicode-range
+// parse error. Must set the character reference code to 0xFFFD
+// https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state
+TEST_F(CharRefTest, NumericOverflow) {
+  errors_are_expected_ = true;
+  const char* inputs[] = {
+      "&#x100000041;",           // 2^32 + 0x41
+      "&#4294967361;",           // 2^32 + 65
+      "&#x10000000000000041;",   // 2^64 + 0x41
+      "&#18446744073709551681;", // 2^64 + 65
+      "&#x7FFFFFFF;",            // INT_MAX
+      "&#xFFFFFFFF;",            // UINT_MAX
+      "&#x110000;",              // smallest out-of-range value
+      "&#X100000041;",           // uppercase X
+  };
+  for (const char* input : inputs) {
+    SCOPED_TRACE(input);
+    unsigned int errors_before = parser_._output->errors.length;
+
+    EXPECT_FALSE(ConsumeCharRef(input));
+    EXPECT_EQ(0xFFFD, output_.first);
+    EXPECT_EQ(kGumboNoChar, output_.second);
+    EXPECT_EQ(-1, utf8iterator_current(&iter_));
+
+    ASSERT_EQ(errors_before + 1, parser_._output->errors.length);
+    GumboError* error = static_cast<GumboError*>(parser_._output->errors.data[errors_before]);
+    EXPECT_EQ(GUMBO_ERR_NUMERIC_CHAR_REF_INVALID, error->type);
+    EXPECT_EQ(0, error->position.offset);
+  }
+}
+
+TEST_F(CharRefTest, NumericOverflowNoSemicolon) {
+  errors_are_expected_ = true;
+  EXPECT_FALSE(ConsumeCharRef("&#x100000041 x"));
+  EXPECT_EQ(0xFFFD, output_.first);
+  EXPECT_EQ(kGumboNoChar, output_.second);
+  EXPECT_EQ(' ', utf8iterator_current(&iter_));
+
+  GumboVector* errors = &parser_._output->errors;
+  ASSERT_EQ(2, errors->length);
+  EXPECT_EQ(GUMBO_ERR_NUMERIC_CHAR_REF_WITHOUT_SEMICOLON, static_cast<GumboError*>(errors->data[0])->type);
+  EXPECT_EQ(GUMBO_ERR_NUMERIC_CHAR_REF_INVALID, static_cast<GumboError*>(errors->data[1])->type);
 }
 
 TEST_F(CharRefTest, NumericUtfInvalid) {

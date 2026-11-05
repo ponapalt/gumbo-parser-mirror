@@ -31,6 +31,10 @@ enum {
   GUMBO_NAMED_CHAR_REF_MAX_LEN = 32
 };
 
+enum {
+  GUMBO_UNICODE_RANGE_UPPER_BOUND = 0x10ffff
+};
+
 struct GumboInternalParser;
 
 const int kGumboNoChar = -1;
@@ -133,7 +137,11 @@ static bool consume_numeric_ref(
   unsigned int codepoint = 0;
   bool status = true;
   do {
-    codepoint = (codepoint * (is_hex ? 16 : 10)) + digit;
+    // Stop accumulating once past the upper bound. The value then stays out of
+    // range, so further digits can't overflow or wrap it back into the valid range.
+    if (codepoint <= GUMBO_UNICODE_RANGE_UPPER_BOUND) {
+      codepoint = (codepoint * (is_hex ? 16 : 10)) + digit;
+    }
     utf8iterator_next(input);
     digit = parse_digit(utf8iterator_current(input), is_hex);
   } while (digit != -1);
@@ -154,7 +162,7 @@ static bool consume_numeric_ref(
     return false;
   }
 
-  if ((codepoint >= 0xd800 && codepoint <= 0xdfff) || codepoint > 0x10ffff) {
+  if ((codepoint >= 0xd800 && codepoint <= 0xdfff) || codepoint > GUMBO_UNICODE_RANGE_UPPER_BOUND) {
     add_codepoint_error(
         parser, input, GUMBO_ERR_NUMERIC_CHAR_REF_INVALID, codepoint);
     *output = 0xfffd;

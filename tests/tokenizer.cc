@@ -101,6 +101,22 @@ TEST_F(GumboTokenizerTest, LexCharRef) {
   EXPECT_EQ(' ', token_.v.character);
 }
 
+TEST_F(GumboTokenizerTest, LexCharRef_NumericOverflow) {
+  errors_are_expected_ = true;
+  SetInput("&#x100000041;B");
+  EXPECT_FALSE(gumbo_lex(&parser_, &token_));
+  EXPECT_EQ(GUMBO_TOKEN_CHARACTER, token_.type);
+  EXPECT_EQ(0, token_.position.offset);
+  EXPECT_EQ(13, token_.original_text.length);
+  EXPECT_EQ(0xFFFD, token_.v.character);
+  gumbo_token_destroy(&parser_, &token_);
+
+  EXPECT_TRUE(gumbo_lex(&parser_, &token_));
+  EXPECT_EQ(GUMBO_TOKEN_CHARACTER, token_.type);
+  EXPECT_EQ(13, token_.position.offset);
+  EXPECT_EQ('B', token_.v.character);
+}
+
 TEST_F(GumboTokenizerTest, LexCharRef_NotCharRef) {
   SetInput("&xyz");
   EXPECT_TRUE(gumbo_lex(&parser_, &token_));
