@@ -145,3 +145,34 @@ if get_option('fuzz')
 		install: false,
 	)
 endif
+
+if get_option('benchmarks')
+	if get_option('optimization') in ['0', 'g']
+		warning('Benchmarking an unoptimized build, try --buildtype=release')
+	endif
+
+	gumbo_perf = executable(
+		'gumbo_perf',
+		'benchmarks/gumbo_perf.c',
+		link_with: [libgumbo],
+		include_directories: ['src'],
+		install: false,
+	)
+
+	benchmark(
+		'gumbo_perf',
+		gumbo_perf,
+		args: files(
+			'benchmarks/arabic_newspapers.html',
+			'benchmarks/baidu.html',
+			'benchmarks/bbc.html',
+			'benchmarks/google.html',
+			'benchmarks/hacker_news.html',
+			'benchmarks/html5_spec.html',
+			'benchmarks/wikipedia.html',
+			'benchmarks/xinhua.html',
+			'benchmarks/yahoo.html',
+		),
+		timeout: 60,
+	)
+endif
