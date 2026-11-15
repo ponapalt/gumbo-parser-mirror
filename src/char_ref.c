@@ -268,7 +268,7 @@ static bool consume_named_ref(
 
   assert(output->first != kGumboNoChar);
   last_char = *(match_end - 1);
-  len = match_end - start;
+  len = (int) (match_end - start);
   if (last_char == ';') {
     bool matched = utf8iterator_maybe_consume_match(input, start, len, true);
     assert(matched);

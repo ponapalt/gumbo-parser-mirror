@@ -82,7 +82,7 @@ gumbo_named_char_ref_hash (register const char *str, register size_t len)
       12647, 12647, 12647, 12647, 12647, 12647, 12647, 12647, 12647, 12647,
       12647, 12647, 12647, 12647, 12647, 12647, 12647, 12647, 12647
     };
-  register unsigned int hval = len;
+  register unsigned int hval = (unsigned int) len;
 
   switch (hval)
     {

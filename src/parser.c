@@ -1037,7 +1037,7 @@ InsertionLocation get_appropriate_insertion_location(
   last_table = open_elements->data[last_table_index];
   if (last_table->parent != NULL) {
     retval.target = last_table->parent;
-    retval.index = last_table->index_within_parent;
+    retval.index = (int) last_table->index_within_parent;
     return retval;
   }
 
